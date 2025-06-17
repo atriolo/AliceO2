@@ -46,6 +46,7 @@
 #include <TAttMarker.h>
 #include <TArrayD.h>
 #include <numeric>
+#include <unordered_set>
 
 #define NLAYERS 3
 
@@ -290,6 +291,9 @@ class EfficiencyStudy : public Task
 
   int nDuplicatedClusters[NLAYERS] = {0};
   int nTracksSelected[NLAYERS] = {0}; // denominator fot the efficiency calculation
+
+  int totNClusters = 0;
+  int nDuplClusters = 0;
 
   std::unique_ptr<TH1D> IPOriginalxy[NLAYERS];
   std::unique_ptr<TH1D> IPOriginalz[NLAYERS];
@@ -2191,8 +2195,8 @@ void EfficiencyStudy::getEfficiency(bool isMC)
     xbins[i] = ptcutl * std::exp(i * a);
   }
 
-  int totNClusters;
-  int nDuplClusters;
+  // int totNClusters = 0;
+  // int nDuplClusters = 0;
 
   for (unsigned int iROF = 0; iROF < mTracksROFRecords.size(); iROF++) { // loop on ROFRecords array
 
@@ -2292,10 +2296,17 @@ void EfficiencyStudy::getEfficiency(bool isMC)
         }
 
         if (mUseMC) { //// excluding known bad chips in MC which are not bad in data --- to be checked based on the anchored run
-          if (std::find(mExcludedChipMC.begin(), mExcludedChipMC.end(), clusOriginal.getChipID()) != mExcludedChipMC.end()) {
+          if (auto search = mExcludedChipMC.find(clusOriginal.getChipID()); search != mExcludedChipMC.end()) {
             continue;
           }
         }
+
+        // /// to be excluded for 2024 runs, chip 309 was missing
+        // const std::unordered_set<int> mExcludedChipData = {299, 300, 301, 317, 318, 319};
+        // if (auto search = mExcludedChipData.find(clusOriginal.getChipID()); search != mExcludedChipData.end()) {
+        //   continue;
+        // }
+
 
         if (clusOriginal.getCol() < 160 || clusOriginal.getCol() > 870) { /// excluding the gap between two chips in the same stave (comment to obtain the plot efficiency col vs eta)
           continue;
@@ -2487,6 +2498,12 @@ void EfficiencyStudy::process(o2::globaltracking::RecoContainer& recoData)
 
   o2::base::GRPGeomHelper::instance().getGRPMagField()->print();
 
+  auto bz = o2::base::Propagator::Instance()->getNominalBz();
+  std::cout<<"Magnetic field: "<<bz<<std::endl;
+
+  // LOG(info) << ">>>>>>>>>>>> Magnetic field: " << o2::base::Propagator::Instance()->getNominalBz();;
+
+
   if (mUseMC) {
     // getDCAClusterTrackMC();
     studyDCAcutsMC();
@@ -2588,23 +2605,23 @@ void EfficiencyStudy::endOfStream(EndOfStreamContext& ec)
   mOutFile->cd("EfficiencyFinal/");
   TList listNum;
   TList listDen;
-  auto numPhiAll = std::unique_ptr<TH1D>((TH1D*)numPhi[0]->Clone("numPhiAll"));
-  auto denPhiAll = std::unique_ptr<TH1D>((TH1D*)denPhi[0]->Clone("denPhiAll"));
+  TH1D* numPhiAll = (TH1D*)numPhi[0]->Clone("numPhiAll");
+  TH1D* denPhiAll = (TH1D*)denPhi[0]->Clone("denPhiAll");
 
   TList listNumColEta;
   TList listDenColEta;
-  auto numColEtaAll = std::unique_ptr<TH1D>((TH1D*)mNumColEta[0]->Clone("numColEtaAll"));
-  auto denColEtaAll = std::unique_ptr<TH1D>((TH1D*)mDenColEta[0]->Clone("denColEtaAll"));
+  TH1D* numColEtaAll = (TH1D*)mNumColEta[0]->Clone("numColEtaAll");
+  TH1D* denColEtaAll = (TH1D*)mDenColEta[0]->Clone("denColEtaAll");
 
   TList listNumRowPhi;
   TList listDenRowPhi;
-  auto numRowPhiAll = std::unique_ptr<TH1D>((TH1D*)mNumRowPhi[0]->Clone("numRowPhiAll"));
-  auto denRowPhiAll = std::unique_ptr<TH1D>((TH1D*)mDenRowPhi[0]->Clone("denRowPhiAll"));
+  TH1D* numRowPhiAll = (TH1D*)mNumRowPhi[0]->Clone("numRowPhiAll");
+  TH1D* denRowPhiAll = (TH1D*)mDenRowPhi[0]->Clone("denRowPhiAll");
 
   TList listNumRowCol;
   TList listDenRowCol;
-  auto numRowColAll = std::unique_ptr<TH1D>((TH1D*)mNumRowCol[0]->Clone("numRowColAll"));
-  auto denRowColAll = std::unique_ptr<TH1D>((TH1D*)mDenRowCol[0]->Clone("denRowColAll"));
+  TH1D* numRowColAll = (TH1D*)mNumRowCol[0]->Clone("numRowColAll");
+  TH1D* denRowColAll = (TH1D*)mDenRowCol[0]->Clone("denRowColAll");
 
   std::unique_ptr<TEfficiency> effLayers = std::make_unique<TEfficiency>(*numLayers, *denLayers);
   effLayers->SetName("effLayers");
