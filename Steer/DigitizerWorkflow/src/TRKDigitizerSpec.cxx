@@ -149,6 +149,7 @@ class TRKDPLDigitizerTask : BaseDPLDigitizer
     // loop over all composite collisions given from context (aka loop over all the interaction records)
     for (size_t collID = 0; collID < timesview.size(); ++collID) {
       auto irt = timesview[collID];
+      LOG(info)<<"Processing collision " << collID << " at time " <<irt.getTimeNS()<<" ns after orbit 0 bc 0";
       if (irt.toLong() < bcShift) { // due to the ROF misalignment the collision would go to negative ROF ID, discard
         continue;
       }

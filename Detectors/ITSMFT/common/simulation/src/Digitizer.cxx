@@ -289,6 +289,8 @@ void Digitizer::processHit(const o2::itsmft::Hit& hit, uint32_t& maxFr, int evID
     return;
   }
   if (isContinuous()) {
+    // LOG(info) << "Hit time (timeInROF in continuous): " << timeInROF + mCollisionTimeWrtROF<<" ns = "<< timeInROF <<" + "<< mCollisionTimeWrtROF<<" ns";
+
     timeInROF += mCollisionTimeWrtROF;
   }
   if (mIsBeforeFirstRO && timeInROF < 0) {

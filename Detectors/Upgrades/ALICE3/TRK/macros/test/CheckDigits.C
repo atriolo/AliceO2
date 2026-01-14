@@ -23,7 +23,7 @@
 #include "TRKBase/SegmentationChip.h"
 #include "TRKBase/GeometryTGeo.h"
 #include "DataFormatsITSMFT/Digit.h"
-#include "ITSMFTSimulation/Hit.h"
+#include "TRKSimulation/Hit.h"
 #include "MathUtils/Utils.h"
 #include "SimulationDataFormat/ConstMCTruthContainer.h"
 #include "SimulationDataFormat/IOMCTruthContainerView.h"
@@ -36,14 +36,14 @@
 
 #define ENABLE_UPGRADES
 
-void CheckDigits(std::string digifile = "trkdigits.root", std::string hitfile = "o2sim_HitsTRK.root", std::string inputGeom = "", std::string paramfile = "o2sim_par.root")
+void CheckDigits(std::string digifile = "trkdigits.root", std::string hitfile = "o2sim_HitsTRK.root", std::string inputGeom = "o2sim_geometry.root", std::string paramfile = "o2sim_par.root")
 {
 
   using namespace o2::base;
   using namespace o2::trk;
 
   using o2::itsmft::Digit;
-  using o2::itsmft::Hit;
+  using o2::trk::Hit;
 
   using o2::trk::SegmentationChip;
 
@@ -64,7 +64,7 @@ void CheckDigits(std::string digifile = "trkdigits.root", std::string hitfile = 
   TFile* hitFile = TFile::Open(hitfile.data());
   TTree* hitTree = (TTree*)hitFile->Get("o2sim");
   int nevH = hitTree->GetEntries(); // hits are stored as one event per entry
-  std::vector<std::vector<o2::itsmft::Hit>*> hitArray(nevH, nullptr);
+  std::vector<std::vector<o2::trk::Hit>*> hitArray(nevH, nullptr);
 
   std::vector<std::unordered_map<uint64_t, int>> mc2hitVec(nevH);
 

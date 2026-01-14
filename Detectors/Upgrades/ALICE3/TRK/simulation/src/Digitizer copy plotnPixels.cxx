@@ -19,6 +19,8 @@
 #include "DetectorsRaw/HBFUtils.h"
 
 #include <TRandom.h>
+#include <TH1D.h>
+#include <TH2D.h>
 // #include <climits>
 #include <vector>
 #include <iostream>
@@ -26,7 +28,8 @@
 #include <fairlogger/Logger.h> // for LOG
 
 using o2::itsmft::Digit;
-using o2::trk::Hit;
+using o2::itsmft::Hit;
+// using o2::trk::Hit;
 using Segmentation = o2::trk::SegmentationChip;
 
 using namespace o2::trk;
@@ -60,8 +63,6 @@ void Digitizer::init()
   mChipSimRespVD = mChipSimResp;   /// for the moment considering the same response
   mChipSimRespMLOT = mChipSimResp; /// for the moment considering the same response
 
-  getresp();
-
   /// setting scale factors to adapt to the APTS response function (adjusting pitch and Y shift)
   // TODO: adjust Y shift when the geometry is improved
   LOG(info) << " Depth max VD: " << mChipSimRespVD->getDepthMax();
@@ -70,15 +71,14 @@ void Digitizer::init()
   LOG(info) << " Depth max MLOT: " << mChipSimRespMLOT->getDepthMax();
   LOG(info) << " Depth min MLOT: " << mChipSimRespMLOT->getDepthMin();
 
-  float thicknessVD = 0.0095;                                            // cm --- hardcoded based on geometry currently present
-  float thicknessMLOT = o2::trk::SegmentationChip::SiliconThicknessMLOT; // 0.01 cm = 100 um --- based on geometry currently present
+  float thicknessVD = 0.0095; // cm --- hardcoded based on geometry currently present
+  float thicknessMLOT = 0.1;  // cm --- hardcoded based on geometry currently present
 
-  mSimRespVDScaleX = o2::trk::constants::alice3resp::pitchX / o2::trk::SegmentationChip::PitchRowVD;
-  mSimRespVDScaleZ = o2::trk::constants::alice3resp::pitchZ / o2::trk::SegmentationChip::PitchColVD;
-  mSimRespVDShift = mChipSimRespVD->getDepthMax(); // the curved, rescaled, sensors have a width from 0 to -95 um. Must add 10 um (= max depth) to match the APTS response.
-  // mSimRespVDShift = 0; // the curved, rescaled, sensors have a width from 0 to -95. The ALICE3 sensor response does not need shift.
-  mSimRespMLOTScaleX = o2::trk::constants::alice3resp::pitchX / o2::trk::SegmentationChip::PitchRowMLOT;
-  mSimRespMLOTScaleZ = o2::trk::constants::alice3resp::pitchZ / o2::trk::SegmentationChip::PitchColMLOT;
+  mSimRespVDScaleX = o2::trk::constants::apts::pitchX / o2::trk::SegmentationChip::PitchRowVD;
+  mSimRespVDScaleZ = o2::trk::constants::apts::pitchZ / o2::trk::SegmentationChip::PitchColVD;
+  mSimRespVDShift = mChipSimRespVD->getDepthMax(); // the curved, rescaled, sensors have a width from 0 to -45. Must add 10 um (= max depth) to match the APTS response.
+  mSimRespMLOTScaleX = o2::trk::constants::apts::pitchX / o2::trk::SegmentationChip::PitchRowMLOT;
+  mSimRespMLOTScaleZ = o2::trk::constants::apts::pitchZ / o2::trk::SegmentationChip::PitchColMLOT;
   mSimRespMLOTShift = mChipSimRespMLOT->getDepthMax() - thicknessMLOT / 2.f; // the shift should be done considering the rescaling done to adapt to the wrong silicon thickness. TODO: remove the scaling factor for the depth when the silicon thickness match the simulated response
   mSimRespOrientation = false;
 
@@ -93,6 +93,50 @@ void Digitizer::init()
   LOGP(info, "Response orientation: {}", mSimRespOrientation ? "flipped" : "normal");
 
   mIRFirstSampledTF = o2::raw::HBFUtils::Instance().getFirstSampledTFIR();
+
+  depth = new TH1D("depth", "depth", 1000, -50, 50);
+  ratioSpanCols = new TH1D("ratioSpanCols", "ratioSpanCols; colSpan/numCols(fired); counts", 100, 1, 5);
+  nColumnsPerHit = new TH1D("nColumnsPerHit", "nColumnsPerHit", 1000, 0, 1000);
+  nColumnsPerHitVsZ = new TH2D("nColumnsPerHitVsZ", "nColumnsPerHitVsZ; z (cm); nColumns per hit", 1000, -25, 25, 200, 0, 200);
+  nColumnsPerHitVsZL0 = new TH2D("nColumnsPerHitVsZL0", "nColumnsPerHitVsZ; z (cm); nColumns per hit", 1000, -25, 25, 200, 0, 200);
+  nColumnsPerHitVsZL1 = new TH2D("nColumnsPerHitVsZL1", "nColumnsPerHitVsZ; z (cm); nColumns per hit", 1000, -25, 25, 200, 0, 200);
+  nColumnsPerHitVsZL2 = new TH2D("nColumnsPerHitVsZL2", "nColumnsPerHitVsZ; z (cm); nColumns per hit", 1000, -25, 25, 200, 0, 200);
+
+  nRowsPerHitVsZL0 = new TH2D("nRowsPerHitVsZL0", "nRowsPerHitVsZ; z (cm); nRows per hit", 500, -25, 25, 50, 0, 50);
+  nRowsPerHitVsZL1 = new TH2D("nRowsPerHitVsZL1", "nRowsPerHitVsZ; z (cm); nRows per hit", 500, -25, 25, 50, 0, 50);
+  nRowsPerHitVsZL2 = new TH2D("nRowsPerHitVsZL2", "nRowsPerHitVsZ; z (cm); nRows per hit", 500, -25, 25, 50, 0, 50);
+
+  nPixelFiredPerHitVsZ = new TH2D("nPixelFiredPerHitVsZ", "nPixelFiredPerHitVsZ; z (cm); nPixels fired per hit", 1000, -25, 25, 500, 0, 500);
+  nPixelFiredPerHitVsZL0 = new TH2D("nPixelFiredPerHitVsZL0", "nPixelFiredPerHitVsZL0; z (cm); nPixels fired per hit", 1000, -25, 25, 500, 0, 500);
+  nPixelFiredPerHitVsZL1 = new TH2D("nPixelFiredPerHitVsZL1", "nPixelFiredPerHitVsZL1; z (cm); nPixels fired per hit", 1000, -25, 25, 500, 0, 500);
+  nPixelFiredPerHitVsZL2 = new TH2D("nPixelFiredPerHitVsZL2", "nPixelFiredPerHitVsZL2; z (cm); nPixels fired per hit", 1000, -25, 25, 500, 0, 500);
+
+  distanceStartEndVsZ = new TH2D("distanceStartEndVsZ", "distanceStartEndVsZ; z (cm); Distance between hit Start and hit End (cm)", 1000, -25, 25, 1000, 0, 1);
+  distanceStartEndVsEta = new TH2D("distanceStartEndVsEta", "distanceStartEndVsEta; #eta; Distance between hit Start and hit End (cm)", 1000, -5, 5, 1000, 0, 1);
+  distanceStartEndVsZL0 = new TH2D("distanceStartEndVsZL0", "distanceStartEndVsZL0; z (cm); Distance between hit Start and hit End (cm)", 1000, -25, 25, 1000, 0, 1);
+  distanceStartEndVsZL1 = new TH2D("distanceStartEndVsZL1", "distanceStartEndVsZL1; z (cm); Distance between hit Start and hit End (cm)", 1000, -25, 25, 1000, 0, 1);
+  distanceStartEndVsZL2 = new TH2D("distanceStartEndVsZL2", "distanceStartEndVsZL2; z (cm); Distance between hit Start and hit End (cm)", 1000, -25, 25, 1000, 0, 1);
+  
+  nColVsRowL0 = new TH2D("nColVsRowL0", "nColVsRowL0; nRows fired; nCols fired", 200, 0, 200, 10, 0, 10);
+  nColVsRowL1 = new TH2D("nColVsRowL1", "nColVsRowL1; nRows fired; nCols fired", 200, 0, 200, 10, 0, 10);
+  nColVsRowL2 = new TH2D("nColVsRowL2", "nColVsRowL2; nRows fired; nCols fired", 200, 0, 200, 10, 0, 10);
+
+  nColumnsPerHitVsEta = new TH2D("nColumnsPerHitVsEta", "nColumnsPerHitVsEta; #eta; nColumns per hit", 1000, -5, 5, 300, 0, 300);
+  nPixelsPerHitVsEta = new TH2D("nPixelsPerHitVsEta", "nPixelsPerHitVsEta; #eta; nPixels per hit", 1000, -5, 5, 300, 0, 300);
+
+  nPixelFiredVsDistance = new TH2D("nPixelFiredVsDistance", "nPixelFiredVsDistance; Distance between hit Start and hit End (cm); nPixels fired per hit", 300, 0, 1, 200, 0, 200);
+  nPixelFiredVsDistanceL0 = new TH2D("nPixelFiredVsDistanceL0", "nPixelFiredVsDistanceL0  ; Distance between hit Start and hit End (cm); nPixels fired per hit", 300, 0, 1, 200, 0, 200);
+  nPixelFiredVsDistanceL1 = new TH2D("nPixelFiredVsDistanceL1", "nPixelFiredVsDistanceL1  ; Distance between hit Start and hit End (cm); nPixels fired per hit", 300, 0, 1, 200, 0, 200);
+  nPixelFiredVsDistanceL2 = new TH2D("nPixelFiredVsDistanceL2", "nPixelFiredVsDistanceL2  ; Distance between hit Start and hit End (cm); nPixels fired per hit", 300, 0, 1, 200, 0, 200);
+  
+  nColumnsVsDistance = new TH2D("nColumnsVsDistance", "nColumnsVsDistance; Distance between hit Start and hit End (cm); nColumns fired per hit", 300, 0, 1, 200, 0, 200);
+  nColumnsVsDistanceL0 = new TH2D("nColumnsVsDistanceL0", "nColumnsVsDistanceL0; Distance between hit Start and hit End (cm); nColumns fired per hit", 300, 0, 1, 200, 0, 200);
+  nColumnsVsDistanceL1 = new TH2D("nColumnsVsDistanceL1", "nColumnsVsDistanceL1; Distance between hit Start and hit End (cm); nColumns fired per hit", 300, 0, 1, 200, 0, 200);
+  nColumnsVsDistanceL2 = new TH2D("nColumnsVsDistanceL2", "nColumnsVsDistanceL2; Distance between hit Start and hit End (cm); nColumns fired per hit", 300, 0, 1, 200, 0, 200);
+
+  occupancyVsZL0 = new TH1D("occupancyVsZL0", "occupancyVsZL0; z (cm); occupancy", 1000, -25, 25);
+  occupancyVsZL1 = new TH1D("occupancyVsZL1", "occupancyVsZL1; z (cm); occupancy", 1000, -25, 25);
+  occupancyVsZL2 = new TH1D("occupancyVsZL2", "occupancyVsZL2; z (cm); occupancy", 1000, -25, 25);
 }
 
 o2::trk::ChipSimResponse* Digitizer::getChipResponse(int chipID)
@@ -113,17 +157,16 @@ void Digitizer::process(const std::vector<Hit>* hits, int evID, int srcID)
   // digitize single event, the time must have been set beforehand
 
   LOG(info) << " Digitizing " << mGeometry->getName() << " (ID: " << mGeometry->getDetID()
-            << ") hits of event " << evID << " from source " << srcID
-            << " at time " << mEventTime.getTimeNS() << " ROFrame = " << mNewROFrame
+            << ") hits of entry " << evID << " from source " << srcID
+            << " at time " << mEventTime << " ROFrame= " << mNewROFrame << ")"
             << " cont.mode: " << isContinuous()
             << " Min/Max ROFrames " << mROFrameMin << "/" << mROFrameMax;
 
-  std::cout << "Printing segmentation info: " << std::endl;
-  SegmentationChip::Print();
+  // std::cout << "Printing segmentation info: " << std::endl;
+  // SegmentationChip::Print();
 
   // // is there something to flush ?
   if (mNewROFrame > mROFrameMin) {
-    LOG(debug)<<" mNewROFrame > mROFrameMin: "<<mNewROFrame<<" < "<<mROFrameMin;
     fillOutputContainer(mNewROFrame - 1); // flush out all frames preceding the new one
   }
 
@@ -137,8 +180,15 @@ void Digitizer::process(const std::vector<Hit>* hits, int evID, int srcID)
             });
   LOG(info) << "Processing " << nHits << " hits";
   for (int i : hitIdx) {
+    // if (i < 200) {
+    // LOG(info)<<" Processing hit " << i << " / " << nHits;
+    // processHit((*hits)[10], mROFrameMax, evID, srcID);
     processHit((*hits)[i], mROFrameMax, evID, srcID);
-  }
+    }
+  
+    
+  // }
+  LOG(info)<<"TOT pixel fired: "<< totPixelsFired;
 
   // in the triggered mode store digits after every MC event
   // TODO: in the real triggered mode this will not be needed, this is actually for the
@@ -151,7 +201,7 @@ void Digitizer::process(const std::vector<Hit>* hits, int evID, int srcID)
 //_______________________________________________________________________
 void Digitizer::setEventTime(const o2::InteractionTimeRecord& irt)
 {
-  LOG(info)<<"Setting event time to " << irt.getTimeNS()<<" ns after orbit 0 bc 0";
+  LOG(info) << "Setting event time ";
   // assign event time in ns
   mEventTime = irt;
   if (!mParams.isContinuous()) {
@@ -167,18 +217,9 @@ void Digitizer::setEventTime(const o2::InteractionTimeRecord& irt)
       nbc--;
     }
 
-    // we might get interactions to digitize from before
-    // the first sampled IR
-    if (nbc < 0) {
-      mNewROFrame = 0;
-      // this event is before the first RO
-      mIsBeforeFirstRO = true;
-    } else {
-      mNewROFrame = nbc / mParams.getROFrameLengthInBC();
-      mIsBeforeFirstRO = false;
-    }
+    mNewROFrame = nbc / mParams.getROFrameLengthInBC();
 
-    LOG(debug) << " NewROFrame " << mNewROFrame << " = " << nbc << "/" << mParams.getROFrameLengthInBC() << " (nbc/mParams.getROFrameLengthInBC()";
+    LOG(info) << " NewROFrame " << mNewROFrame << " = " << nbc << "/" << mParams.getROFrameLengthInBC() << " (nbc/mParams.getROFrameLengthInBC()";
 
     // in continuous mode depends on starts of periodic readout frame
     mCollisionTimeWrtROF += (nbc % mParams.getROFrameLengthInBC()) * o2::constants::lhc::LHCBunchSpacingNS;
@@ -262,11 +303,49 @@ void Digitizer::fillOutputContainer(uint32_t frameLast)
     mExtraBuff.emplace_back(mExtraBuff.front().release());
     mExtraBuff.pop_front();
   }
+  nColumnsPerHit->SaveAs("plots/nColumnsPerHit.root");
+  nColumnsPerHitVsZ->SaveAs("plots/nColumnsPerHitVsZ.root");
+  nColumnsPerHitVsZL0->SaveAs("plots/nColumnsPerHitVsZL0.root");
+  nColumnsPerHitVsZL1->SaveAs("plots/nColumnsPerHitVsZL1.root");
+  nColumnsPerHitVsZL2->SaveAs("plots/nColumnsPerHitVsZL2.root");
+  nRowsPerHitVsZL0->SaveAs("plots/nRowsPerHitVsZL0.root");
+  nRowsPerHitVsZL1->SaveAs("plots/nRowsPerHitVsZL1.root");
+  nRowsPerHitVsZL2->SaveAs("plots/nRowsPerHitVsZL2.root");
+  nPixelFiredPerHitVsZ->SaveAs("plots/nPixelFiredPerHitVsZ.root");
+  nPixelFiredPerHitVsZL0->SaveAs("plots/nPixelFiredPerHitVsZL0.root");
+  nPixelFiredPerHitVsZL1->SaveAs("plots/nPixelFiredPerHitVsZL1.root");
+  nPixelFiredPerHitVsZL2->SaveAs("plots/nPixelFiredPerHitVsZL2.root");
+  distanceStartEndVsEta->SaveAs("plots/distanceStartEndVsEta.root");
+  distanceStartEndVsZ->SaveAs("plots/distanceStartEndVsZ.root");
+  distanceStartEndVsZL0->SaveAs("plots/distanceStartEndVsZL0.root");
+  distanceStartEndVsZL1->SaveAs("plots/distanceStartEndVsZL1.root");
+  distanceStartEndVsZL2->SaveAs("plots/distanceStartEndVsZL2.root");
+  nColumnsPerHitVsEta->SaveAs("plots/nColumnsPerHitVsEta.root");
+  nPixelsPerHitVsEta->SaveAs("plots/nPixelsPerHitVsEta.root");
+  nPixelFiredVsDistance->SaveAs("plots/nPixelFiredVsDistance.root");
+  nPixelFiredVsDistanceL0->SaveAs("plots/nPixelFiredVsDistanceL0.root");
+  nPixelFiredVsDistanceL1->SaveAs("plots/nPixelFiredVsDistanceL1.root");
+  nPixelFiredVsDistanceL2->SaveAs("plots/nPixelFiredVsDistanceL2.root");
+  nColumnsVsDistance->SaveAs("plots/nColumnsVsDistance.root");
+  nColumnsVsDistanceL0->SaveAs("plots/nColumnsVsDistanceL0.root");
+  nColumnsVsDistanceL1->SaveAs("plots/nColumnsVsDistanceL1.root");
+  nColumnsVsDistanceL2->SaveAs("plots/nColumnsVsDistanceL2.root");
+
+  occupancyVsZL0->SaveAs("plots/occupancyVsZL0.root");
+  occupancyVsZL1->SaveAs("plots/occupancyVsZL1.root");
+  occupancyVsZL2->SaveAs("plots/occupancyVsZL2.root");
+
+  nColVsRowL0->SaveAs("plots/nColVsRowL0.root");
+  nColVsRowL1->SaveAs("plots/nColVsRowL1.root");
+  nColVsRowL2->SaveAs("plots/nColVsRowL2.root");
+  depth->SaveAs("plots/depth.root");
+  ratioSpanCols->SaveAs("plots/ratioSpanCols.root");
 }
 
 //_______________________________________________________________________
-void Digitizer::processHit(const o2::trk::Hit& hit, uint32_t& maxFr, int evID, int srcID)
+void Digitizer::processHit(const o2::itsmft::Hit& hit, uint32_t& maxFr, int evID, int srcID)
 {
+  int counterPixels = 0;
   int chipID = hit.GetDetectorID(); //// the chip ID at the moment is not referred to the chip but to a wider detector element (e.g. quarter of layer or disk in VD, stave in ML, half stave in OT)
   int subDetID = mGeometry->getSubDetID(chipID);
 
@@ -278,6 +357,17 @@ void Digitizer::processHit(const o2::trk::Hit& hit, uint32_t& maxFr, int evID, i
     return; // skipping hits on disks for the moment
   }
 
+  if (subDetID == 1) {
+    LOG(debug) << "Skipping MLOT " << layer;
+    return; // skipping hits on VD for the moment
+  }
+
+  
+  // if (hit.GetPosStart().Y()< hit.GetPos().Y()){
+  //   LOG(info) << "Skipping hit with inverted direction";
+  //   return;
+  // }
+
   LOG(debug) << "Processing hit for chip " << chipID;
   auto& chip = mChips[chipID];
   if (chip.isDisabled()) {
@@ -285,7 +375,7 @@ void Digitizer::processHit(const o2::trk::Hit& hit, uint32_t& maxFr, int evID, i
     return;
   }
   float timeInROF = hit.GetTime() * sec2ns;
-  LOG(debug) << "Hit time: " << timeInROF<<" ns";
+  LOG(debug) << "timeInROF: " << timeInROF;
   if (timeInROF > 20e3) {
     const int maxWarn = 10;
     static int warnNo = 0;
@@ -296,12 +386,11 @@ void Digitizer::processHit(const o2::trk::Hit& hit, uint32_t& maxFr, int evID, i
     return;
   }
   if (isContinuous()) {
-    // LOG(info) << "Hit time (timeInROF in continuous): " << timeInROF + mCollisionTimeWrtROF<<" ns = "<< timeInROF <<" + "<< mCollisionTimeWrtROF<<" ns";
     timeInROF += mCollisionTimeWrtROF;
   }
-  if (mIsBeforeFirstRO && timeInROF < 0) {
+  if (timeInROF < 0) {
     // disregard this hit because it comes from an event byefore readout starts and it does not effect this RO
-    // LOG(info) << "Ignoring hit with timeInROF = " << timeInROF;
+    LOG(debug) << "Ignoring hit with timeInROF = " << timeInROF;
     return;
   }
 
@@ -309,14 +398,12 @@ void Digitizer::processHit(const o2::trk::Hit& hit, uint32_t& maxFr, int evID, i
   if (timeInROF < 0) {
     timeInROF = 0.;
   }
-  // float tTot = mParams.getSignalShape().getMaxDuration();
-  float tTot = 2000; // ns, artificially assigning a short signal duration for testing, to reduce the probability to cross the ROF. TODO: go back to a "trapezoid" shape when readout specs will be available
+  float tTot = mParams.getSignalShape().getMaxDuration();
   // frame of the hit signal start wrt event ROFrame
   int roFrameRel = int(timeInROF * mParams.getROFrameLengthInv());
   // frame of the hit signal end  wrt event ROFrame: in the triggered mode we read just 1 frame
   uint32_t roFrameRelMax = mParams.isContinuous() ? (timeInROF + tTot) * mParams.getROFrameLengthInv() : roFrameRel;
   int nFrames = roFrameRelMax + 1 - roFrameRel;
-  // LOG(info)<<"Number of frames occupied by this hit: "<<nFrames;
   uint32_t roFrameMax = mNewROFrame + roFrameRelMax;
   if (roFrameMax > maxFr) {
     maxFr = roFrameMax; // if signal extends beyond current maxFrame, increase the latter
@@ -337,7 +424,7 @@ void Digitizer::processHit(const o2::trk::Hit& hit, uint32_t& maxFr, int evID, i
     // transform the point on the curved surface to a flat one
     math_utils::Vector2D<float> xyFlatS = Segmentation::curvedToFlat(layer, xyzLocS.x(), xyzLocS.y());
     math_utils::Vector2D<float> xyFlatE = Segmentation::curvedToFlat(layer, xyzLocE.x(), xyzLocE.y());
-    // LOG(info) << "Hit Curved (Start): " << xyzLocS.x()  << " -> (End) " << xyzLocE.x()<< "   ----- > Flat (Start): " << xyFlatS.y()*1e4<< " -> (End) " << xyFlatE.y()*1e4;
+    LOG(debug) << "Called curved to flat: " << xyzLocS.x() << " -> " << xyFlatS.x() << ", " << xyzLocS.y() << " -> " << xyFlatS.y();
     // update the local coordinates with the flattened ones
     xyzLocS.SetXYZ(xyFlatS.x(), xyFlatS.y(), xyzLocS.Z());
     xyzLocE.SetXYZ(xyFlatE.x(), xyFlatE.y(), xyzLocE.Z());
@@ -348,6 +435,13 @@ void Digitizer::processHit(const o2::trk::Hit& hit, uint32_t& maxFr, int evID, i
   // math_utils::Vector3D<float> exampleLoc(matrix ^ (examplehitGlob)); // start position in sensor frame
   // std::cout<< "Example hit in local frame: " << exampleLoc << std::endl;
   // std::cout<<"Going back to glob coordinates: " << (matrix * exampleLoc) << std::endl;
+
+  //// adapting the depth (Y) of the chip to the APTS response maximum depth
+  LOG(debug) << "local original: startPos = " << xyzLocS << ", endPos = " << xyzLocE << std::endl;
+  xyzLocS.SetY(xyzLocS.Y());
+  xyzLocE.SetY(xyzLocE.Y());
+
+  LOG(debug) << "rescaled Y: startPos = " << xyzLocS << ", endPos = " << xyzLocE << std::endl;
 
   math_utils::Vector3D<float> step(xyzLocE);
   step -= xyzLocS;
@@ -427,10 +521,7 @@ void Digitizer::processHit(const o2::trk::Hit& hit, uint32_t& maxFr, int evID, i
   // take into account that the ChipSimResponse depth defintion has different min/max boundaries
   // although the max should coincide with the surface of the epitaxial layer, which in the chip
   // local coordinates has Y = +SensorLayerThickness/2
-  // LOG(info)<<"SubdetID = " << subDetID<< " shift: "<<mSimRespVDShift<<" or "<<mSimRespMLOTShift;
-  // LOG(info)<< " Before shift: S = " << xyzLocS.Y()*1e4 << "  E = " << xyzLocE.Y()*1e4;
   xyzLocS.SetY(xyzLocS.Y() + ((subDetID == 0) ? mSimRespVDShift : mSimRespMLOTShift));
-  // LOG(info)<< " After shift: S = " << xyzLocS.Y()*1e4 << "  E = " << xyzLocE.Y()*1e4;
 
   // collect charge in every pixel which might be affected by the hit
   for (int iStep = nSteps; iStep--;) {
@@ -457,14 +548,14 @@ void Digitizer::processHit(const o2::trk::Hit& hit, uint32_t& maxFr, int evID, i
       rspmat = resp->getResponse(mSimRespMLOTScaleX * (xyzLocS.X() - cRowPix), mSimRespMLOTScaleZ * (xyzLocS.Z() - cColPix), xyzLocS.Y(), flipRow, flipCol, rowMax, colMax);
     }
 
+    depth->Fill(xyzLocS.Y()*1e4); // in microns
     xyzLocS += step;
 
     if (rspmat == nullptr) {
       LOG(debug) << "Error in rspmat for step " << iStep << " / " << nSteps;
       continue;
     }
-    // LOG(info) << "rspmat valid! for step " << iStep << " / " << nSteps << ", (row,col) = (" << row << "," << col << ")";
-    // LOG(info) << "rspmat valid! for step " << iStep << " / " << nSteps << " Y= " << xyzLocS.Y()*1e4 << " , (row,col) = (" << row << "," << col << ")";
+    LOG(debug) << "rspmat valid! for step " << iStep << " / " << nSteps << ", (row,col) = (" << row << "," << col << ")";
     // rspmat->print(); // print the response matrix for debugging
 
     for (int irow = AlpideRespSimMat::NPix; irow--;) {
@@ -486,20 +577,32 @@ void Digitizer::processHit(const o2::trk::Hit& hit, uint32_t& maxFr, int evID, i
   o2::MCCompLabel lbl(hit.GetTrackID(), evID, srcID, false);
   auto roFrameAbs = mNewROFrame + roFrameRel;
   LOG(debug) << "\nSpanning through rows and columns; rowspan = " << rowSpan << " colspan = " << colSpan << " = " << colE << " - " << colS << " +1 ";
+  uint16_t maxCol = 0;
+  uint16_t minCol = 51000;
+  int numCol = 0;
+  int numRow = 0;
+  int numPixelsFired = 0;
+  bool anypixelFired = false;
   for (int irow = rowSpan; irow--;) {          // irow ranging from 4 to 0
+    int deltaCol = 0;
+    int pixFiredinRow = 0;
+    
     uint16_t rowIS = irow + rowS;              // row distant irow from the row of the hit start
+    // LOG(info)<<"Row: "<<rowIS;
+    bool pixelFired = false;
     for (int icol = colSpan; icol--;) {        // icol ranging from 4 to 0
       float nEleResp = respMatrix[irow][icol]; // value of the probability of the response in this pixel
       if (nEleResp <= 1.e-36) {
+        // LOG(info)<<" Ignoring pixel at (row,col)=(" << irow << "," << icol << ") with nEleResp = " << nEleResp<< "<= 1.e-36";
         continue;
       }
       LOG(debug) << "nEleResp: value " << nEleResp << " for pixel " << irow << " " << icol;
       int nEle = gRandom->Poisson(nElectrons * nEleResp); // total charge in given pixel = number of electrons generated in the hit multiplied by the probability of being detected in their position
       LOG(debug) << "Charge detected in the pixel: " << nEle << " for pixel " << irow << " " << icol;
       // ignore charge which have no chance to fire the pixel
-      if (nEle < mParams.getMinChargeToAccount()) { /// TODO: substitute with the threshold?
-        LOG(debug) << "Ignoring pixel with nEle = " << nEle << " < min charge to account "
-                   << mParams.getMinChargeToAccount() << " for pixel " << irow << " " << icol;
+      if (nEle < mParams.getMinChargeToAccount()+1) { /// TODO: substitute with the threshold?
+        LOG(debug) << "Ignoring pixel at (row,col)=(" << irow << "," << icol << ") with nEle = " << nEle << " < min charge to account "
+                   << mParams.getMinChargeToAccount()+1 << " for pixel " << irow << " " << icol;
         continue;
       }
 
@@ -510,10 +613,87 @@ void Digitizer::processHit(const o2::trk::Hit& hit, uint32_t& maxFr, int evID, i
       if (mDeadChanMap && mDeadChanMap->isNoisy(chipID, rowIS, colIS)) {
         continue;
       }
-
       registerDigits(chip, roFrameAbs, timeInROF, nFrames, rowIS, colIS, nEle, lbl);
+      // LOG(info)<<"Doing max/min between colIS: "<<colIS<<" and maxCol: "<<maxCol<<", minCol: "<<minCol;
+      maxCol = std::max(colIS, maxCol);
+      minCol = std::min(minCol, colIS);
+      // LOG(info)<<"col min, max: "<<minCol<<", "<<maxCol;
+      depth->Fill(xyzLocS.Y()*1e4); // in microns
+      LOG(debug)<<"Registered digit at (row,col)=(" << rowIS << "," << colIS << ") with nEle=" << nEle;
+      LOG(debug)<<" MaxCol: " << maxCol << " MinCol: " << minCol <<" icol: " << icol;
+      pixelFired = true;
+      numPixelsFired++;
+      totPixelsFired[layer]++;
+      pixFiredinRow++;
+      // LOG(info)<<"Pixel r,c = "<<rowIS<<","<<colIS<<" fired."<<"  ROF: "<<roFrameAbs<< "  With charge :" <<nEle;
+      anypixelFired = true;
+    }
+    // LOG(info)<<"Finished row "<<rowIS<<". Pixel fired in this row: "<<pixFiredinRow;
+    // LOG(info)<<"General counter: "<<numPixelsFired;
+    if (pixelFired){
+      numRow++;
     }
   }
+  if (!anypixelFired){
+    return; // do nor fill histograms
+  }
+
+  numCol = abs(maxCol - minCol) + 1;
+  LOG(info)<<"Hit spanned from column "<<minCol<<" to "<<maxCol;
+  LOG(info)<<"Total number of pixels fired for this hit: "<<numPixelsFired<< " which span in "<<numRow<<" rows and "<<numCol<<" columns.";
+  LOG(info)<<"numCol = "<<numCol;
+  
+  float theta = 0;
+
+  nPixelFiredVsDistance->Fill( abs( hit.GetPos().Z()-hit.GetPosStart().Z()), numPixelsFired);
+  nColumnsVsDistance->Fill( abs( hit.GetPos().Z()-hit.GetPosStart().Z()), numCol);
+  
+  
+  ratioSpanCols->Fill(float(colSpan)/float(numCol));
+  nColumnsPerHit->Fill(numCol);
+  nColumnsPerHitVsZ->Fill(hit.GetPosStart().Z(), numCol);
+  distanceStartEndVsZ->Fill(hit.GetPosStart().Z(), abs( hit.GetPos().Z()-hit.GetPosStart().Z()));
+  nPixelFiredPerHitVsZ->Fill(hit.GetPosStart().Z(), numPixelsFired);
+  if (layer == 0){
+    theta = atan2(0.5,hit.GetPosStart().Z());
+    nColumnsPerHitVsZL0->Fill(hit.GetPosStart().Z(), numCol);
+    nRowsPerHitVsZL0->Fill(hit.GetPosStart().Z(), numRow);
+    nPixelFiredPerHitVsZL0->Fill(hit.GetPosStart().Z(), numPixelsFired);
+    distanceStartEndVsZL0->Fill(hit.GetPosStart().Z(),abs( hit.GetPos().Z()-hit.GetPosStart().Z()));
+    nColVsRowL0->Fill(numCol, numRow);
+    nPixelFiredVsDistanceL0->Fill( abs( hit.GetPos().Z()-hit.GetPosStart().Z()), numPixelsFired);
+    nColumnsVsDistanceL0->Fill( abs( hit.GetPos().Z()-hit.GetPosStart().Z()), numCol);
+    occupancyVsZL0->SetBinContent(occupancyVsZL0->FindBin(hit.GetPosStart().Z()),  occupancyVsZL0->GetBinContent(occupancyVsZL0->FindBin(hit.GetPosStart().Z())) + float(totPixelsFired[layer])/mNCollisions/(nCols*nRows));
+  }
+  if (layer == 1){
+    theta = atan2(1.2,hit.GetPosStart().Z());
+    nColumnsPerHitVsZL1->Fill(hit.GetPosStart().Z(), numCol);
+    nRowsPerHitVsZL1->Fill(hit.GetPosStart().Z(), numRow);
+    nPixelFiredPerHitVsZL1->Fill(hit.GetPosStart().Z(), numPixelsFired);
+    distanceStartEndVsZL1->Fill(hit.GetPosStart().Z(),abs( hit.GetPos().Z()-hit.GetPosStart().Z()));
+    nColVsRowL1->Fill(numCol, numRow);
+    nPixelFiredVsDistanceL1->Fill( abs( hit.GetPos().Z()-hit.GetPosStart().Z()), numPixelsFired);
+    nColumnsVsDistanceL1->Fill( abs( hit.GetPos().Z()-hit.GetPosStart().Z()), numCol);
+    occupancyVsZL1->SetBinContent(occupancyVsZL1->FindBin(hit.GetPosStart().Z()),  occupancyVsZL1->GetBinContent(occupancyVsZL1->FindBin(hit.GetPosStart().Z())) + float(totPixelsFired[layer])/mNCollisions/(nCols*nRows));
+  }
+  if (layer == 2){
+    theta = atan2(2.5,hit.GetPosStart().Z());
+    nColumnsPerHitVsZL2->Fill(hit.GetPosStart().Z(), numCol);
+    nRowsPerHitVsZL2->Fill(hit.GetPosStart().Z(), numRow);
+    nPixelFiredPerHitVsZL2->Fill(hit.GetPosStart().Z(), numPixelsFired);
+    distanceStartEndVsZL2->Fill(hit.GetPosStart().Z(), abs( hit.GetPos().Z()-hit.GetPosStart().Z()));
+    nColVsRowL2->Fill(numCol, numRow);
+    nPixelFiredVsDistanceL2->Fill( abs( hit.GetPos().Z()-hit.GetPosStart().Z()), numPixelsFired);
+    nColumnsVsDistanceL2->Fill( abs( hit.GetPos().Z()-hit.GetPosStart().Z()), numCol);
+    occupancyVsZL2->SetBinContent(occupancyVsZL2->FindBin(hit.GetPosStart().Z()),  occupancyVsZL2->GetBinContent(occupancyVsZL2->FindBin(hit.GetPosStart().Z())) + float(totPixelsFired[layer])/mNCollisions/(nCols*nRows));
+  }
+  float eta = -log(tan(theta/2.));
+  // LOG(info)<<"Occupancy: "<< float(numPixelsFired)/mNCollisions/(nCols*nRows)<< "  numPixelsFired: "<<numPixelsFired<<" nCols: "<<nCols<<" nRows: "<<nRows<<" mNCollisions: "<<mNCollisions;
+  
+  nColumnsPerHitVsEta->Fill(eta, numCol);
+  nPixelsPerHitVsEta->Fill(eta, numPixelsFired);
+  distanceStartEndVsEta->Fill(eta, abs( hit.GetPos().Z()-hit.GetPosStart().Z()));
+  LOG(info)<<"TOT layer occupancy: "<<layer<<" : "<< float(totPixelsFired[layer])/mNCollisions/(nCols*nRows);
 }
 
 //________________________________________________________________________________
@@ -523,11 +703,12 @@ void Digitizer::registerDigits(o2::trk::ChipDigitsContainer& chip, uint32_t roFr
   // Register digits for given pixel, accounting for the possible signal contribution to
   // multiple ROFrame. The signal starts at time tInROF wrt the start of provided roFrame
   // In every ROFrame we check the collected signal during strobe
+  LOG(debug) << "Registering digits for chip " << chip.getChipIndex() << " at ROFrame " << roFrame
+             << " row " << row << " col " << col << " nEle " << nEle << " label " << lbl;
   float tStrobe = mParams.getStrobeDelay() - tInROF; // strobe start wrt signal start
   for (int i = 0; i < nROF; i++) {
     uint32_t roFr = roFrame + i;
-    // int nEleROF = mParams.getSignalShape().getCollectedCharge(nEle, tStrobe, tStrobe + mParams.getStrobeLength());
-    int nEleROF = nEle; // artificially assigning always the max charge to not get biased by the ALPIDE trapezoid. TODO: go back to a "trapzoid" when chip readout specs will be available
+    int nEleROF = mParams.getSignalShape().getCollectedCharge(nEle, tStrobe, tStrobe + mParams.getStrobeLength());
     tStrobe += mParams.getROFrameLength(); // for the next ROF
 
     // discard too small contributions, they have no chance to produce a digit
@@ -540,8 +721,6 @@ void Digitizer::registerDigits(o2::trk::ChipDigitsContainer& chip, uint32_t roFr
     if (roFr < mEventROFrameMin) {
       mEventROFrameMin = roFr;
     }
-    LOG(debug) << "Registering digits for chip " << chip.getChipIndex() << " at ROFrame " << roFr
-             << " row " << row << " col " << col << " nEle " << nEle << " label " << lbl;
     auto key = chip.getOrderingKey(roFr, row, col);
     o2::itsmft::PreDigit* pd = chip.findDigit(key);
     if (!pd) {

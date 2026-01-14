@@ -14,19 +14,21 @@
 #ifndef ALICEO2_TRK_DIGITIZER_H
 #define ALICEO2_TRK_DIGITIZER_H
 
-#include <iostream>
 #include <vector>
 #include <deque>
 #include <memory>
 
 #include "Rtypes.h"  // for Digitizer::Class
 #include "TObject.h" // for TObject
+#include <TH1D.h>
+#include <TH2D.h>
 
 #include "TRKSimulation/ChipSimResponse.h"
 #include "TRKSimulation/ChipDigitsContainer.h"
 
 #include "TRKSimulation/DigiParams.h"
-#include "TRKSimulation/Hit.h"
+#include "ITSMFTSimulation/Hit.h"
+// #include "TRKSimulation/Hit.h"
 #include "TRKBase/GeometryTGeo.h"
 #include "DataFormatsITSMFT/Digit.h"
 #include "DataFormatsITSMFT/ROFRecord.h"
@@ -43,6 +45,56 @@ class Digitizer
   using ExtraDig = std::vector<itsmft::PreDigitLabelRef>; ///< container for extra contributions to PreDigits
 
  public:
+
+  int totPixelsFired[3] = {0,0,0}; 
+
+  TH1D* occupancyVsZL0;
+  TH1D* occupancyVsZL1;
+  TH1D* occupancyVsZL2;
+
+  TH1D * depth;
+  TH1D * ratioSpanCols;
+
+  TH1D *nColumnsPerHit;
+  TH2D *nColumnsPerHitVsZ;
+
+  TH2D *nColumnsPerHitVsEta;
+  TH2D *nPixelsPerHitVsEta;
+
+  TH2D *nColumnsPerHitVsZL0;
+  TH2D *nColumnsPerHitVsZL1;
+  TH2D *nColumnsPerHitVsZL2;    
+  TH2D *nRowsPerHitVsZL0;
+  TH2D *nRowsPerHitVsZL1;
+  TH2D *nRowsPerHitVsZL2;    
+  TH2D *nRowsPerHitVsXL0;
+  TH2D *nRowsPerHitVsXL1;
+  TH2D *nRowsPerHitVsXL2;
+  TH2D * nColVsRowL0;
+  TH2D * nColVsRowL1;
+  TH2D * nColVsRowL2;
+
+  TH2D *nPixelFiredPerHitVsZ;
+  TH2D *nPixelFiredPerHitVsZL0;
+  TH2D *nPixelFiredPerHitVsZL1;
+  TH2D *nPixelFiredPerHitVsZL2;
+
+  TH2D* distanceStartEndVsZ;
+  TH2D* distanceStartEndVsEta;
+  TH2D* distanceStartEndVsZL0;
+  TH2D* distanceStartEndVsZL1;
+  TH2D* distanceStartEndVsZL2;
+
+  TH2D *nPixelFiredVsDistance;
+  TH2D *nPixelFiredVsDistanceL0;
+  TH2D *nPixelFiredVsDistanceL1;
+  TH2D *nPixelFiredVsDistanceL2;
+  TH2D *nColumnsVsDistance;
+  TH2D *nColumnsVsDistanceL0;
+  TH2D *nColumnsVsDistanceL1;
+  TH2D *nColumnsVsDistanceL2;
+
+  void setNCollisions(int n) { mNCollisions = n; }
   void setDigits(std::vector<o2::itsmft::Digit>* dig) { mDigits = dig; }
   void setMCLabels(o2::dataformats::MCTruthContainer<o2::MCCompLabel>* mclb) { mMCLabels = mclb; }
   void setROFRecords(std::vector<o2::itsmft::ROFRecord>* rec) { mROFRecords = rec; }
@@ -55,7 +107,7 @@ class Digitizer
   o2::trk::ChipSimResponse* getChipResponse(int chipID);
 
   /// Steer conversion of hits to digits
-  void process(const std::vector<o2::trk::Hit>* hits, int evID, int srcID);
+  void process(const std::vector<itsmft::Hit>* hits, int evID, int srcID);
   void setEventTime(const o2::InteractionTimeRecord& irt);
   double getEndTimeOfROFMax() const
   {
@@ -84,7 +136,7 @@ class Digitizer
   void setDeadChannelsMap(const o2::itsmft::NoiseMap* mp) { mDeadChanMap = mp; }
 
  private:
-  void processHit(const o2::trk::Hit& hit, uint32_t& maxFr, int evID, int srcID);
+  void processHit(const o2::itsmft::Hit& hit, uint32_t& maxFr, int evID, int srcID);
   void registerDigits(o2::trk::ChipDigitsContainer& chip, uint32_t roFrame, float tInROF, int nROF,
                       uint16_t row, uint16_t col, int nEle, o2::MCCompLabel& lbl);
 
@@ -103,13 +155,15 @@ class Digitizer
   /// Get the number of columns according to the subdetector
   /// \param subDetID 0 for VD, 1 for ML/OT
   /// \param layer 0 to 2 for VD, 0 to 7 for ML/OT
-  /// \return Number of columns (In the entire layer(VD) or chip (ML/OT)
+  /// \return Number of columns (for the moment, in the entire layer(VD) or stave (ML/OT)
   int getNCols(int subDetID, int layer)
   {
     if (subDetID == 0) { // VD
       return constants::VD::petal::layer::nCols;
-    } else if (subDetID == 1) { // ML/OT: the smallest element is a chip of 470 rows and 640 cols
-      return constants::moduleMLOT::chip::nCols;
+    } else if (subDetID == 1 && layer <= 3) { // ML
+      return constants::ML::nCols;
+    } else if (subDetID == 1 && layer >= 4) { // OT
+      return constants::OT::nCols;
     }
     return 0;
   }
@@ -117,13 +171,15 @@ class Digitizer
   /// Get the number of rows according to the subdetector
   /// \param subDetID 0 for VD, 1 for ML/OT
   /// \param layer 0 to 2 for VD, 0 to 7 for ML/OT
-  /// \return Number of rows (In the entire layer(VD) or chip (ML/OT)
+  /// \return Number of rows (for the moment, in the entire layer(VD) or stave (ML/OT)
   int getNRows(int subDetID, int layer)
   {
     if (subDetID == 0) { // VD
       return constants::VD::petal::layer::nRows[layer];
-    } else if (subDetID == 1) { // ML/OT
-      return constants::moduleMLOT::chip::nRows;
+    } else if (subDetID == 1 && layer <= 3) { // ML
+      return constants::ML::nRows;
+    } else if (subDetID == 1 && layer >= 4) { // OT
+      return constants::OT::nRows;
     }
     return 0;
   }
@@ -137,8 +193,7 @@ class Digitizer
   uint32_t mROFrameMin = 0; ///< lowest RO frame of current digits
   uint32_t mROFrameMax = 0; ///< highest RO frame of current digits
   uint32_t mNewROFrame = 0; ///< ROFrame corresponding to provided time
-  bool mIsBeforeFirstRO = false;
-  
+
   uint32_t mEventROFrameMin = 0xffffffff; ///< lowest RO frame for processed events (w/o automatic noise ROFs)
   uint32_t mEventROFrameMax = 0;          ///< highest RO frame forfor processed events (w/o automatic noise ROFs)
 
@@ -149,13 +204,7 @@ class Digitizer
   o2::trk::ChipSimResponse* mChipSimRespMLOT = nullptr; // simulated response for ML/OT chips
 
   // std::string mResponseFile = "$(O2_ROOT)/share/Detectors/ITSMFT/data/AlpideResponseData/AlpideResponseData.root";
-  // std::string mResponseFile = "$(O2_ROOT)/share/Detectors/Upgrades/ITS3/data/ITS3ChipResponseData/APTSResponseData.root"; /// using temporarly the APTS response
-  std::string mResponseFile = "/home/atriolo/alice3/ALICE3ResponseData.root "; /// using temporarly the APTS response
-
-  void getresp(){
-    std::cout<<"Using response file: "<<mResponseFile<<std::endl;
-    // std::cout<<" PATH: "<<getenv("O2_ROOT")<<std::endl;
-  }
+  std::string mResponseFile = "$(O2_ROOT)/share/Detectors/Upgrades/ITS3/data/ITS3ChipResponseData/APTSResponseData.root"; /// using temporarly the APTS response
 
   bool mSimRespOrientation{false};   // wether the orientation in the response function is flipped
   float mSimRespVDShift{0.f};        // adjusting the Y-shift in the APTS response function to match sensor local coord.
@@ -172,6 +221,7 @@ class Digitizer
   std::vector<o2::trk::ChipDigitsContainer> mChips; ///< Array of chips digits containers
   std::deque<std::unique_ptr<ExtraDig>> mExtraBuff; ///< buffer (per roFrame) for extra digits
 
+  int mNCollisions = 0;
   std::vector<o2::itsmft::Digit>* mDigits = nullptr;                       //! output digits
   std::vector<o2::itsmft::ROFRecord>* mROFRecords = nullptr;               //! output ROF records
   o2::dataformats::MCTruthContainer<o2::MCCompLabel>* mMCLabels = nullptr; //! output labels

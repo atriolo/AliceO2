@@ -43,6 +43,10 @@ void AlpideSimResponse::initData(int tableNumber, std::string dataPath, const bo
   {
     const std::string newDataPath = dataPath + "Vbb-3.0V";
     setDataPath(newDataPath); // setting the new data path
+  } else if (tableNumber == 2) // -4.8V back bias
+  {
+    const std::string newDataPath = dataPath + "Vbb-4.8V";
+    setDataPath(newDataPath); // setting the new data path
   }
 
   if (mData.size()) {
@@ -87,6 +91,7 @@ void AlpideSimResponse::initData(int tableNumber, std::string dataPath, const bo
 
   while (inpGrid >> mStepInvRow && inpGrid.good()) {
     mNBinRow++;
+    // std::cout<<"Reading grid: "<<inpfname<< " -> mStepInvRow="<<mStepInvRow<<" mNBinRow="<<mNBinRow<<std::endl;
   }
   if (!mNBinRow || mStepInvRow < kTiny) {
     LOG(fatal) << "Failed to read Y(row) binning from " << inpfname;
@@ -105,8 +110,10 @@ void AlpideSimResponse::initData(int tableNumber, std::string dataPath, const bo
   mDptMin = 2.e9;
   const int npix = AlpideRespSimMat::getNPix();
 
+  // std::cout<<"mNBinCol="<<mNBinCol<<" mNBinRow="<<mNBinRow<<std::endl;
   for (int ix = 0; ix < mNBinCol; ix++) {
     for (int iy = 0; iy < mNBinRow; iy++) {
+      // std::cout<<"Composing data name for ix="<<ix<<" iy="<<iy<<std::endl;
       inpfname = composeDataName(ix, iy);
       inpGrid.open(inpfname, std::ifstream::in);
       if (inpGrid.fail()) {
@@ -205,8 +212,10 @@ string AlpideSimResponse::composeDataName(int colBin, int rowBin)
    * compose the file-name to read data for bin colBin,rowBin
    */
 
+  // std::cout<<"Compose data name for colBin="<<colBin<<" rowBin="<<rowBin<<std::endl;
   // ugly but safe way to compose the file name
-  float vcol = colBin / mStepInvCol, vrow = rowBin / mStepInvRow;
+  float vcol =  std::floor(colBin / mStepInvCol), vrow = std::floor(rowBin / mStepInvRow);
+  // std::cout<<"vcol="<<vcol<<" vrow="<<vrow<<" mStepInvCol="<<mStepInvCol<<" mStepInvRow="<<mStepInvRow<<std::endl;
   size_t size = snprintf(nullptr, 0, mColRowDataFmt.data(), vcol, vrow) + 1;
   unique_ptr<char[]> tmp(new char[size]);
   snprintf(tmp.get(), size, mColRowDataFmt.data(), vcol, vrow);
@@ -244,6 +253,7 @@ bool AlpideSimResponse::getResponse(float vRow, float vCol, float vDepth, Alpide
 
   size_t bin = getDepthBin(vDepth) + mNBinDpt * (getRowBin(vRow) + mNBinRow * getColBin(vCol));
   if (bin >= mData.size()) {
+    // std::cout<<"getDepthBin: pos="<<vDepth<<" mDptMax="<<mDptMax<<" mStepInvDpt="<<mStepInvDpt<<" i="<<bin<<std::endl;
     // this should not happen
     LOG(fatal) << "requested bin " << bin << "row/col/depth: " << getRowBin(vRow) << ":" << getColBin(vCol)
                << ":" << getDepthBin(vDepth) << ")"
